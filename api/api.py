@@ -2,12 +2,12 @@ import os
 import uuid
 import json
 import boto3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 ddb = boto3.resource("dynamodb")
 table = ddb.Table(os.environ["TABLE_NAME"])
 
-JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
+JST = timezone(timedelta(hours=+9), 'JST')
 
 HEADERS = {
     "Access-Control-Allow-Origin": "*",

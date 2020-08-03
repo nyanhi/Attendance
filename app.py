@@ -12,7 +12,7 @@ JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
 
 class AttendanceRecord(core.Stack):
     def __init__(self, scope: core.App, name: str, **kwargs):
-        super.__init__(scope, name, **kwargs)
+        super().__init__(scope, name, **kwargs)
 
         table = ddb.Table(
             self, "Timestamps",
@@ -62,13 +62,13 @@ class AttendanceRecord(core.Stack):
         )
 
         start = api.root.add_resource('start')
-        start.add.method(
+        start.add_method(
             'POST',
             apigw.LambdaIntegration(post_start_lambda)
         )
 
         end = api.root.add_resource('end')
-        end.add.method(
+        end.add_method(
             'POST',
             apigw.LambdaIntegration(post_end_lambda)
         )
