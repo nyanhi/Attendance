@@ -1,9 +1,5 @@
 import os
 import datetime
-from flask import Flask, jsonify, render_template, make_response, abort
-from pathlib import Path
-from logging import getLogger, FileHandler
-# from google.cloud import bigquery
 from aws_cdk import (
     core,
     aws_dynamodb as ddb,
@@ -11,50 +7,81 @@ from aws_cdk import (
     aws_apigateway as apigw,
 )
 
-app = Flask(__name__)
 JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
 
-logger = getLogger()
-handler = FileHandler()
-logger.addHandler(handler)
+
+class AttendanceRecord(core.Stack):
+    def __init__(self, scope: core.App, name: str, **kwargs):
+        super.__init__(scope, name, **kwargs)
+
+        table = ddb.Table(
+            self, "Timestamps",
+            partition_key=ddb.Attribute(
+                name="timestamp",
+                type=ddb.AttributeType.STRING
+            ),
+            billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=core.RemovalPolicy.DESTROY
+        )
+
+        common_params = {
+            "runtime": _lambda.Runtime.PYTHON_3_7,
+            "environment": {
+                "TABLE_NAME": table.table_name
+            }
+        }
+
+        post_start_lambda = _lambda.Function(
+            self, "PostStart",
+            code=_lambda.Code.from_asset('api'),
+            handler='api.post_start',
+            memory_size=512,
+            timeout=core.Duration.seconds(10),
+            **common_params
+        )
+
+        post_end_lambda = _lambda.Function(
+            self, "PostEnd",
+            code=_lambda.Code.from_asset('api'),
+            handler='api.post_end',
+            memory_size=512,
+            timeout=core.Duration.seconds(10),
+            **common_params
+        )
+
+        # grant permissions
+        table.grant_read_write_data(post_start_lambda)
+        table.grant_read_write_data(post_end_lambda)
+
+        api = apigw.RestApi(
+            self, "AttendanceApi",
+            default_cors_preflight_options=apigw.CorsOptions(
+                allow_origins=apigw.Cors.ALL_ORIGINS,
+                allow_methods=apigw.Cors.ALL_METHODS,
+            )
+        )
+
+        start = api.root.add_resource('start')
+        start.add.method(
+            'POST',
+            apigw.LambdaIntegration(post_start_lambda)
+        )
+
+        end = api.root.add_resource('end')
+        end.add.method(
+            'POST',
+            apigw.LambdaIntegration(post_end_lambda)
+        )
 
 
-"""
-def initial_bq():
-    logger.info(f'start to init bq...')
-    # os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(Path("~/.var/bq-credtinal.json"))  # todo - something
-    # client = bigquery.Client()
-    # table_id = ""  # todo - something
-    # table = client.get_table(table_id)
-    logger.info('end to init bq...')
-    return client, table
-"""
+app = core.App()
+AttendanceRecord(
+    app, "AttendanceRecord",
+    env={
+        "region": os.environ["CDK_DEFAULT_REGION"],
+        "account": os.environ["CDK_DEFAULT_ACCOUNT"],
+    }
+)
 
-class
+app.synth()
 
-
-# CLIENT, TABLE = initial_bq()
-
-
-def insert_row(row):
-    errors = CLIENT.insert_rows(TABLE, [row])
-    if not errors:
-        logger.info("New rows have been added.")
-        return "ok"
-    else:
-        logger.error(f"{errors}")
-        return "err"
-
-
-@app.route('/start_attendance')
-def start_attendance():
-    return insert_row((datetime.datetime.now(JST), "出勤"))
-
-
-@app.route('/end_attendance')
-def end_attendance():
-    return insert_row((datetime.datetime.now(JST), "退勤"))
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', ports=2346)
